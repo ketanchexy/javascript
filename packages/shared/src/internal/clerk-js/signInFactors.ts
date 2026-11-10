@@ -1,4 +1,10 @@
-import type { PreferredSignInStrategy, SignInFactor, SignInStrategy, VerificationResource } from '../../types';
+import type {
+  PhoneCodeChannel,
+  PreferredSignInStrategy,
+  SignInFactor,
+  SignInStrategy,
+  VerificationResource,
+} from '../../types';
 
 /**
  * Picks the first factor a sign-in starts on, following the algorithm at
@@ -22,7 +28,8 @@ export function determineStartingSignInFactor(
 }
 
 /**
- * Tells whether the pending first factor verification holds a code for `factor`.
+ * Tells whether the pending first factor verification holds a code for `factor`,
+ * matching strategy and channel, with `sms` and no channel counted as the same.
  * FAPI does not say which email or phone a code went to, so `preparedFactorKey`,
  * the key of the factor last prepared in this mount or `null` if none, tells
  * factors with the same strategy apart.
@@ -30,15 +37,21 @@ export function determineStartingSignInFactor(
  * @internal
  */
 export function isFirstFactorCodeSent(
-  verification: Pick<VerificationResource, 'status' | 'strategy'>,
+  verification: Pick<VerificationResource, 'status' | 'strategy' | 'channel'>,
   factor: SignInFactor,
   preparedFactorKey: string | null,
 ): boolean {
+  const factorChannel = 'channel' in factor ? factor.channel : undefined;
   return (
     verification.status === 'unverified' &&
     verification.strategy === factor.strategy &&
+    normalizeChannel(verification.channel) === normalizeChannel(factorChannel) &&
     (preparedFactorKey === null || preparedFactorKey === getSignInFactorKey(factor))
   );
+}
+
+function normalizeChannel(channel: PhoneCodeChannel | undefined): PhoneCodeChannel | undefined {
+  return channel === 'sms' ? undefined : channel;
 }
 
 /**

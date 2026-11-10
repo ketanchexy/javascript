@@ -159,6 +159,24 @@ describe('isFirstFactorCodeSent', () => {
     expect(isFirstFactorCodeSent(phonePending, email, null)).toBe(false);
   });
 
+  it('is not sent when the pending code went over another channel', () => {
+    const whatsappPending = { status: 'unverified' as const, strategy: 'phone_code', channel: 'whatsapp' as const };
+    expect(isFirstFactorCodeSent(whatsappPending, phoneA, null)).toBe(false);
+  });
+
+  it('is sent when the pending code went over the channel of the factor shown', () => {
+    const whatsappPending = { status: 'unverified' as const, strategy: 'phone_code', channel: 'whatsapp' as const };
+    const phoneAWhatsapp: SignInFactor = { ...phoneA, channel: 'whatsapp' };
+    expect(isFirstFactorCodeSent(whatsappPending, phoneAWhatsapp, null)).toBe(true);
+  });
+
+  it('treats sms and no channel as the same channel', () => {
+    const smsPending = { status: 'unverified' as const, strategy: 'phone_code', channel: 'sms' as const };
+    const phoneASms: SignInFactor = { ...phoneA, channel: 'sms' };
+    expect(isFirstFactorCodeSent(smsPending, phoneA, null)).toBe(true);
+    expect(isFirstFactorCodeSent(phonePending, phoneASms, null)).toBe(true);
+  });
+
   it.each([null, 'verified', 'expired', 'failed', 'transferable'] as const)(
     'is not sent when the verification status is %s',
     status => {
