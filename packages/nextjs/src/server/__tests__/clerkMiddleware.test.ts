@@ -1541,36 +1541,8 @@ describe('contentSecurityPolicy option', () => {
 describe('Poppy middleware', () => {
   const endpoint = 'https://clerk.company.example/v1/poppy/browser_sessions';
 
-  it('returns the Poppy scope challenge without running the application or changing cookies', async () => {
-    authenticateRequestMock.mockRejectedValueOnce(
-      new ClerkAPIResponseError('Scope required', {
-        status: 403,
-        data: [{ code: 'insufficient_scope', message: 'Scope required' }],
-      }),
-    );
-    const handler = vi.fn();
-    const middleware = clerkMiddleware(handler, { __experimental_poppy: true });
-    const response = await middleware(
-      mockRequest({
-        url: 'https://company.example/',
-        headers: { cookie: '__Host-poppy_session=browser-token; __session=native-session' },
-      }),
-      {} as NextFetchEvent,
-    );
-    assert(response instanceof Response);
-    expect(response.status).toBe(403);
-    expect(response.headers.get('www-authenticate')).toBe(
-      'Bearer error="insufficient_scope", scope="poppy:browser-sign-in"',
-    );
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
-    expect(await response.text()).toBe('Additional authorization is required. Missing scope: poppy:browser-sign-in.');
-    expect(response.headers.getSetCookie()).toEqual([]);
-    expect(response.headers.has('x-middleware-set-cookie')).toBe(false);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
   it.each([
+    { name: 'discovery is enabled', enabled: true, status: 403, code: 'insufficient_scope' },
     { name: 'Poppy is disabled', enabled: false, status: 403, code: 'insufficient_scope' },
     { name: 'a different forbidden error', enabled: true, status: 403, code: 'origin_invalid' },
     { name: 'an infrastructure failure', enabled: true, status: 503, code: 'insufficient_scope' },
@@ -1714,18 +1686,17 @@ describe('Poppy middleware', () => {
     },
   );
 
-  it.each([true, false])('exposes verified identity only on an authenticated agent; signed in=%s', async signedIn => {
-    const identity = {
-      session_id: 'protocol-session',
-      client_id: 'https://agent.example',
-      user_id: 'pseudonym',
-      ...(signedIn
-        ? { account: { user_id: 'user_123', session_id: 'sess_123', scopes: ['poppy:browser-sign-in'] } }
-        : {}),
-    };
+  it.each([true, false])('exposes common agent attribution only when signed in=%s', async signedIn => {
+    const agentId = 'https://agent.example';
     const token = [
       JSON.stringify({ alg: 'RS256', typ: 'JWT' }),
-      JSON.stringify({ sub: 'user_123', sid: 'sess_123', agt: { id: identity.client_id }, iat: 0, exp: 9999999999 }),
+      JSON.stringify({
+        sub: 'user_123',
+        sid: 'sess_123',
+        agt: { id: agentId, poppy: { session_id: 'protocol-session' } },
+        iat: 0,
+        exp: 9999999999,
+      }),
       'signature',
     ]
       .map(part => Buffer.from(part).toString('base64url'))
@@ -1734,7 +1705,6 @@ describe('Poppy middleware', () => {
       status: signedIn ? AuthStatus.SignedIn : AuthStatus.SignedOut,
       token: signedIn ? token : null,
       tokenType: TokenType.SessionToken,
-      poppy: identity,
       toAuth: () => ({
         tokenType: TokenType.SessionToken,
         isAuthenticated: signedIn,
@@ -1747,10 +1717,6 @@ describe('Poppy middleware', () => {
     const middleware = clerkMiddleware({ __experimental_poppy: true });
     const response = await middleware(mockRequest({ url: 'https://company.example/cart' }), {} as NextFetchEvent);
     assert(response instanceof Response);
-    const data = decryptClerkRequestData(
-      response.headers.get('x-middleware-request-' + constants.Headers.ClerkRequestData),
-    );
-    expect(data.poppySession).toEqual(identity);
     const serverHeaders = new Headers();
     response.headers.forEach((value, key) => {
       if (key.startsWith('x-middleware-request-')) {
@@ -1761,16 +1727,12 @@ describe('Poppy middleware', () => {
       new NextRequest('https://company.example/cart', { headers: serverHeaders }),
     );
     expect(appAuth.isAuthenticated).toBe(signedIn);
-    expect(Object.keys(appAuth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
     if (signedIn) {
       expect(appAuth.agent).toEqual({
         type: 'agent',
-        sub: identity.client_id,
-        __experimental_poppyClientId: identity.client_id,
-        __experimental_poppyUserId: identity.user_id,
-        __experimental_poppySessionId: identity.session_id,
+        sub: agentId,
       });
-      expectTypeOf(appAuth.agent?.__experimental_poppySessionId).toEqualTypeOf<string | undefined>();
+      expectTypeOf(appAuth.agent?.sub).toEqualTypeOf<string | undefined>();
     } else {
       expect(appAuth).not.toHaveProperty('agent');
     }

@@ -51,7 +51,6 @@ export type { ClerkMiddlewareAuth, ClerkMiddlewareSessionAuthObject, ClerkMiddle
  */
 export type {
   OrganizationMembershipRole,
-  PoppyBrowserSession,
   // Resources
   AllowlistIdentifier,
   Client,

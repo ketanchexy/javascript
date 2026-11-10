@@ -1,7 +1,6 @@
-import type { JwtPayload } from '@clerk/shared/types';
+import type { AgentActClaim, JwtPayload } from '@clerk/shared/types';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { PoppyBrowserSession } from '../../api/endpoints/PoppyApi';
 import { createBackendApiClient } from '../../api/factory';
 import { createJwt, mockJwtPayload } from '../../fixtures';
 import { mockTokens, mockVerificationResults } from '../../fixtures/machine';
@@ -35,52 +34,30 @@ describe('makeAuthObjectSerializable', () => {
 });
 
 describe('signedInAuthObject', () => {
-  const poppy: PoppyBrowserSession = {
-    client_id: 'https://agent.example',
-    session_id: 'protocol-session',
-    user_id: 'pseudonym',
-  };
-
   it.each([
-    { name: 'ordinary Session has no agent', claims: {}, identity: undefined, expected: undefined },
+    { name: 'ordinary Session has no agent', claims: {}, expected: undefined },
     {
       name: 'impersonation remains actor attribution',
       claims: { act: { sub: 'impersonator' } },
-      identity: undefined,
       expected: undefined,
     },
     {
       name: 'agent-task Session uses the existing Session agent shape',
       claims: { agt: { id: 'agent_123', tsk: 'agtsk_123', reg: 'https://clerk.com' } },
-      identity: undefined,
       expected: { type: 'agent', sub: 'agent_123', task_id: 'agtsk_123' },
     },
     {
-      name: 'guest identity does not attribute an independent human account to an agent',
-      claims: {},
-      identity: poppy,
-      expected: undefined,
-    },
-    {
-      name: 'guest protocol identity does not replace native agent-task attribution',
-      claims: { agt: { id: 'agent_123', tsk: 'agtsk_123' } },
-      identity: poppy,
-      expected: { type: 'agent', sub: 'agent_123', task_id: 'agtsk_123' },
-    },
-    {
-      name: 'unresolved JWT Poppy data is not exposed as verified protocol identity',
-      claims: { agt: { id: poppy.client_id, poppy } },
-      identity: undefined,
-      expected: { type: 'agent', sub: poppy.client_id },
+      name: 'Poppy Session uses the existing Session agent shape',
+      claims: { agt: { id: 'https://agent.example', poppy: { session_id: 'protocol-session' } } },
+      expected: { type: 'agent', sub: 'https://agent.example' },
     },
     {
       name: 'malformed agent claim is not exposed',
       claims: { agt: { id: 123, tsk: 'agtsk_123' } },
-      identity: undefined,
       expected: undefined,
     },
-  ])('$name', ({ claims, identity, expected }) => {
-    const auth = signedInAuthObject({ poppySession: identity }, 'token', {
+  ])('$name', ({ claims, expected }) => {
+    const auth = signedInAuthObject({}, 'token', {
       ...mockJwtPayload,
       __raw: 'token',
       ...claims,
@@ -89,78 +66,34 @@ describe('signedInAuthObject', () => {
     });
 
     expect(auth.agent).toEqual(expected);
-    expect(Object.keys(auth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
+    expectTypeOf(auth.agent).toEqualTypeOf<AgentActClaim | undefined>();
     expect(auth.userId).toBe('user_123');
     expect(auth.actor).toEqual('act' in claims ? claims.act : undefined);
     expect(auth).not.toHaveProperty('poppy');
   });
 
-  it('exposes current verified protocol IDs only on the authenticated agent', () => {
-    const current = {
-      ...poppy,
-      account: { user_id: 'user_123', session_id: 'sess_123', scopes: ['poppy:browser-sign-in'] },
-    };
-    const auth = signedInAuthObject({ poppySession: current }, 'token', {
-      ...mockJwtPayload,
-      __raw: 'token',
-      sub: 'user_123',
-      sid: 'sess_123',
-      agt: { id: poppy.client_id, poppy: { ...poppy, session_id: 'stale-session' } },
-    });
-
-    expect(auth.agent).toEqual({
-      type: 'agent',
-      sub: poppy.client_id,
-      __experimental_poppyClientId: current.client_id,
-      __experimental_poppyUserId: current.user_id,
-      __experimental_poppySessionId: current.session_id,
-    });
-    expectTypeOf(auth.agent?.__experimental_poppySessionId).toEqualTypeOf<string | undefined>();
-    expect(Object.keys(auth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
-    expect(auth.userId).toBe(current.account.user_id);
-    expect(auth.sessionId).toBe(current.account.session_id);
-  });
-
-  it.each([
-    { name: 'another agent', client_id: 'https://another-agent.example', user_id: 'user_123', session_id: 'sess_123' },
-    { name: 'another account', client_id: poppy.client_id, user_id: 'user_other', session_id: 'sess_123' },
-    { name: 'another Clerk session', client_id: poppy.client_id, user_id: 'user_123', session_id: 'sess_other' },
-  ])('does not attach protocol identity from $name', ({ client_id, user_id, session_id }) => {
-    const auth = signedInAuthObject(
-      { poppySession: { ...poppy, client_id, account: { user_id, session_id, scopes: ['poppy:browser-sign-in'] } } },
-      'token',
-      { ...mockJwtPayload, __raw: 'token', sub: 'user_123', sid: 'sess_123', agt: { id: poppy.client_id } },
-    );
-
-    expect(auth.agent).toEqual({ type: 'agent', sub: poppy.client_id });
-    expect(Object.keys(auth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
-  });
-
-  it('omits guest identity from the auth object', async () => {
-    const auth = signedOutAuthObject({ poppySession: poppy });
+  it('omits agent attribution from signed-out auth', async () => {
+    const auth = signedOutAuthObject();
 
     expect(auth).not.toHaveProperty('agent');
-    expect(Object.keys(auth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
     expect(auth.userId).toBeNull();
     expect(auth.sessionId).toBeNull();
     expect(auth.isAuthenticated).toBe(false);
     expect(auth.has({ permission: 'org:admin' })).toBe(false);
     expect(await auth.getToken()).toBeNull();
-    expect(auth).not.toHaveProperty('poppy');
   });
 
   it('omits agent attribution when a pending Clerk Session is treated as signed out', () => {
     const auth = getAuthObjectFromJwt(
       decodeJwt(
         createJwt({
-          payload: { sub: 'user_123', sid: 'sess_123', sts: 'pending', agt: { id: poppy.client_id } },
+          payload: { sub: 'user_123', sid: 'sess_123', sts: 'pending', agt: { id: 'https://agent.example' } },
         }),
       ),
-      { poppySession: poppy },
+      {},
     );
 
     expect(auth).not.toHaveProperty('agent');
-    expect(Object.keys(auth).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
     expect(auth.isAuthenticated).toBe(false);
     expect(auth.userId).toBeNull();
     expect(auth.sessionStatus).toBe('pending');

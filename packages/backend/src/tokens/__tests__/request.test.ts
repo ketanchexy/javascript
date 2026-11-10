@@ -1,15 +1,16 @@
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
-import { createBackendApiClient } from '../../api/factory';
 import { MachineTokenVerificationErrorCode, TokenVerificationErrorReason } from '../../errors';
 import {
   mockExpiredJwt,
   mockInvalidSignatureJwt,
   mockJwks,
   mockJwt,
+  mockJwtHeader,
   mockJwtPayload,
   mockM2MJwtPayload,
+  pemEncodedPublicKey,
   signingJwks,
 } from '../../fixtures';
 import {
@@ -510,76 +511,55 @@ describe('tokens.authenticateRequest(options)', () => {
     vi.clearAllMocks();
   });
 
-  describe('Poppy account precedence', () => {
+  describe('agent Session JWT authentication', () => {
     const identity = { session_id: 'protocol-session', client_id: 'https://agent.example', user_id: 'pseudonym' };
-    const account = { user_id: mockJwtPayload.sub, session_id: mockJwtPayload.sid, scopes: ['poppy:browser-sign-in'] };
 
-    it.each([true, false])('checks a Poppy JWT without its browser cookie; live grant=%s', async active => {
+    it.each([
+      { name: 'valid bearer token', cookie: false, expired: false },
+      { name: 'valid session cookie', cookie: true, expired: false },
+      { name: 'expired bearer token', cookie: false, expired: true },
+    ])('uses normal JWT verification for $name without a backend call', async ({ cookie, expired }) => {
       const { data: jwt } = await signJwt(
-        { ...mockJwtPayload, agt: { id: identity.client_id, poppy: { session_id: 'protocol-session' } } },
-        signingJwks,
         {
-          algorithm: 'RS256',
-          header: { typ: 'JWT', kid: 'ins_2GIoQhbUpy0hX7B2cVkuTMinXoD' },
+          ...mockJwtPayload,
+          ...(expired ? { exp: mockJwtPayload.iat - 10 } : {}),
+          agt: { id: identity.client_id, poppy: identity },
         },
+        signingJwks,
+        { algorithm: 'RS256', header: { ...mockJwtHeader } },
       );
-      server.use(
-        http.get('https://api.clerk.test/v1/jwks', () => HttpResponse.json(mockJwks)),
-        http.post('https://clerk.inspired.puma-74.lcl.dev/v1/poppy/browser_sessions/resolve', async ({ request }) => {
-          expect(await request.json()).toEqual({ credential: { type: 'session', token: jwt } });
-          return HttpResponse.json(active ? { ...identity, account } : { errors: [] }, { status: active ? 200 : 401 });
-        }),
-      );
+      const fetch = vi.spyOn(globalThis, 'fetch');
+      const request = cookie
+        ? mockRequestWithCookies({}, { __session: jwt, __client_uat: mockJwtPayload.iat })
+        : mockRequestWithHeaderAuth({ authorization: `Bearer ${jwt}` });
       const state = await authenticateRequest(
-        mockRequestWithHeaderAuth({ authorization: `Bearer ${jwt}` }),
-        mockOptions({ apiClient: createBackendApiClient({}) }),
+        request,
+        mockOptions({ jwtKey: pemEncodedPublicKey, publishableKey: PK_LIVE }),
       );
-      expect(state.isAuthenticated).toBe(active);
-      const auth = state.toAuth();
-      if (active) {
-        expect(auth).toMatchObject({
+      expect(fetch).not.toHaveBeenCalled();
+      expect(state.isAuthenticated).toBe(!expired);
+      if (expired) {
+        expect(state.status).toBe(AuthStatus.Handshake);
+        expect(state.toAuth()).toBeNull();
+      } else {
+        expect(state.toAuth()).toMatchObject({
+          userId: mockJwtPayload.sub,
+          sessionId: mockJwtPayload.sid,
           agent: {
             type: 'agent',
             sub: identity.client_id,
-            __experimental_poppyClientId: identity.client_id,
-            __experimental_poppyUserId: identity.user_id,
-            __experimental_poppySessionId: identity.session_id,
           },
         });
-        expect(Object.keys(auth!).filter(key => key.startsWith('__experimental_poppy'))).toEqual([]);
-      } else {
-        expect(auth).not.toHaveProperty('agent');
       }
+      fetch.mockRestore();
     });
 
-    it('propagates an authority store outage for a native agent Session', async () => {
-      const { data: jwt } = await signJwt(
-        { ...mockJwtPayload, agt: { id: identity.client_id, poppy: { session_id: identity.session_id } } },
-        signingJwks,
-        { algorithm: 'RS256', header: { typ: 'JWT', kid: 'ins_2GIoQhbUpy0hX7B2cVkuTMinXoD' } },
-      );
-      server.use(
-        http.get('https://api.clerk.test/v1/jwks', () => HttpResponse.json(mockJwks)),
-        http.post('https://clerk.inspired.puma-74.lcl.dev/v1/poppy/browser_sessions/resolve', () =>
-          HttpResponse.json({ errors: [] }, { status: 503 }),
-        ),
-      );
-      await expect(
-        authenticateRequest(
-          mockRequestWithHeaderAuth({ authorization: `Bearer ${jwt}` }),
-          mockOptions({ apiClient: createBackendApiClient({}) }),
-        ),
-      ).rejects.toMatchObject({ status: 503 });
-    });
-
-    it('does not interpret an application cookie as a Poppy credential', async () => {
-      server.use(http.get('https://api.clerk.test/v1/jwks', () => HttpResponse.json(mockJwks)));
+    it('does not interpret an application cookie as authenticated agent identity', async () => {
       const state = await authenticateRequest(
         mockRequestWithHeaderAuth({ cookie: '__Host-poppy_session=untrusted' }),
-        mockOptions({ apiClient: createBackendApiClient({}), __experimental_poppy: true }),
+        mockOptions({ jwtKey: pemEncodedPublicKey, __experimental_poppy: true }),
       );
       expect(state.isAuthenticated).toBe(true);
-      expect(state.poppy).toBeFalsy();
       expect(state.toAuth()).not.toHaveProperty('agent');
     });
   });

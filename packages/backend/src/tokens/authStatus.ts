@@ -1,6 +1,5 @@
 import type { JwtPayload, PendingSessionOptions } from '@clerk/shared/types';
 
-import type { PoppyBrowserSession } from '../api/endpoints/PoppyApi';
 import { constants } from '../constants';
 import type { TokenVerificationErrorReason } from '../errors';
 import type { AuthenticateContext } from './authenticateContext';
@@ -41,7 +40,6 @@ type ToAuth<T extends TokenType | null, Authenticated extends boolean> = T exten
       : () => UnauthenticatedMachineObject<Exclude<T, SessionTokenType | null>>;
 
 export type AuthenticatedState<T extends TokenType = SessionTokenType> = {
-  poppy?: PoppyBrowserSession | null;
   status: typeof AuthStatus.SignedIn;
   reason: null;
   message: null;
@@ -65,7 +63,6 @@ export type AuthenticatedState<T extends TokenType = SessionTokenType> = {
 };
 
 export type UnauthenticatedState<T extends TokenType | null = SessionTokenType> = {
-  poppy?: PoppyBrowserSession | null;
   status: typeof AuthStatus.SignedOut;
   reason: AuthReason;
   message: string;
@@ -121,7 +118,6 @@ export const AuthErrorReason = {
   SessionTokenWithoutClientUAT: 'session-token-but-no-client-uat',
   ActiveOrganizationMismatch: 'active-organization-mismatch',
   TokenTypeMismatch: 'token-type-mismatch',
-  PoppyAccountInvalid: 'poppy-account-invalid',
   UnexpectedError: 'unexpected-error',
 } as const;
 
@@ -154,10 +150,7 @@ export function signedIn<T extends TokenType>(params: SignedInParams & { tokenTy
       const authObject = signedInAuthObject(authenticateContext, token, sessionClaims);
 
       if (treatPendingAsSignedOut && authObject.sessionStatus === 'pending') {
-        return signedOutAuthObject(
-          authenticateContext.poppySession ? { poppySession: authenticateContext.poppySession } : undefined,
-          authObject.sessionStatus,
-        );
+        return signedOutAuthObject(undefined, authObject.sessionStatus);
       }
 
       return authObject;

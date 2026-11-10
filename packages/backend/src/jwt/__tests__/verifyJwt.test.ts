@@ -41,7 +41,7 @@ describe('hasValidSignature(jwt, key)', () => {
         iss: 'https://clerk.example.com',
       },
       privateKey,
-      { algorithm: 'EdDSA', header: { kid: 'ed25519-test', typ: 'JWT' } },
+      { algorithm: 'EdDSA', header: { ...mockJwtHeader, kid: 'ed25519-test' } },
     );
     expect(signed).toBeDefined();
     const { data: decoded } = decodeJwt(signed!);

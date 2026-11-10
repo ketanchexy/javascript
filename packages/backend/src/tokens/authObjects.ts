@@ -14,7 +14,6 @@ import type {
 
 import type { APIKey, CreateBackendApiOptions, IdPOAuthAccessToken, M2MToken } from '../api';
 import { createBackendApiClient } from '../api';
-import type { PoppyBrowserSession } from '../api/endpoints/PoppyApi';
 import { isTokenTypeAccepted } from '../internal';
 import type { AuthenticateContext } from './authenticateContext';
 import { isMachineTokenType } from './machine';
@@ -33,28 +32,13 @@ type AuthObjectDebug = () => AuthObjectDebugData;
 
 type Claims = Record<string, any>;
 
-type AuthAgent = AgentActClaim & {
-  __experimental_poppyClientId?: string;
-  __experimental_poppyUserId?: string;
-  __experimental_poppySessionId?: string;
-};
-
-const getAuthAgent = (claims: JwtPayload, session?: PoppyBrowserSession | null): AuthAgent | undefined => {
+const getAuthAgent = (claims: JwtPayload): AgentActClaim | undefined => {
   const claim: unknown = claims.agt;
   if (typeof claim === 'object' && claim !== null && 'id' in claim && typeof claim.id === 'string' && claim.id) {
     return {
       type: 'agent',
       sub: claim.id,
       ...('tsk' in claim && typeof claim.tsk === 'string' ? { task_id: claim.tsk } : {}),
-      ...(session?.account?.user_id === claims.sub &&
-      session.account.session_id === claims.sid &&
-      session.client_id === claim.id
-        ? {
-            __experimental_poppyClientId: session.client_id,
-            __experimental_poppyUserId: session.user_id,
-            __experimental_poppySessionId: session.session_id,
-          }
-        : {}),
     };
   }
   return undefined;
@@ -71,7 +55,7 @@ export type SignedInAuthObjectOptions = CreateBackendApiOptions & {
  * @internal
  */
 export type SignedInAuthObject = SharedSignedInAuthObjectProperties & {
-  agent?: AuthAgent;
+  agent?: AgentActClaim;
   /**
    * The allowed token type.
    */
@@ -229,7 +213,7 @@ export function signedInAuthObject(
   const { actor, sessionId, sessionStatus, userId, orgId, orgRole, orgSlug, orgPermissions, factorVerificationAge } =
     __experimental_JWTPayloadToAuthObjectProperties(sessionClaims);
   const apiClient = createBackendApiClient(authenticateContext);
-  const agent = getAuthAgent(sessionClaims, authenticateContext.poppySession);
+  const agent = getAuthAgent(sessionClaims);
   const getToken = createGetToken({
     sessionId,
     sessionToken,

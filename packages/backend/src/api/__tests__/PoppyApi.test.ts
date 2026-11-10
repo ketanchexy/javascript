@@ -6,7 +6,6 @@ import { createBackendApiClient } from '../factory';
 
 describe('PoppyAPI', () => {
   const frontendApi = 'https://clerk.company.example';
-  const identity = { session_id: 'protocol-session', client_id: 'https://agent.example', user_id: 'pseudonym' };
 
   it('gets discovery from the authenticated Backend API artifact without changing the document', async () => {
     const metadata = {
@@ -48,19 +47,4 @@ describe('PoppyAPI', () => {
     });
     await expect(poppy.getMetadata()).rejects.toMatchObject({ status });
   });
-
-  it.each([{ type: 'session' as const, token: 'native-session-jwt' }])(
-    'uses the unified resolver for $type credentials',
-    async credential => {
-      server.use(
-        http.post(frontendApi + '/v1/poppy/browser_sessions/resolve', async ({ request }) => {
-          expect(request.headers.has('authorization')).toBe(false);
-          expect(await request.json()).toEqual({ credential });
-          return HttpResponse.json(identity);
-        }),
-      );
-      const { __experimental_poppy: poppy } = createBackendApiClient({});
-      await expect(poppy.resolveSession(credential, frontendApi)).resolves.toEqual(identity);
-    },
-  );
 });

@@ -1,8 +1,6 @@
-import { isClerkAPIResponseError } from '@clerk/shared/error';
 import { logger } from '@clerk/shared/logger';
 import type { JwtPayload } from '@clerk/shared/types';
 
-import type { PoppyBrowserSession, PoppyCredential } from '../api/endpoints/PoppyApi';
 import { constants } from '../constants';
 import type { TokenCarrier } from '../errors';
 import { MachineTokenVerificationError, TokenVerificationError, TokenVerificationErrorReason } from '../errors';
@@ -898,16 +896,17 @@ export const authenticateRequest: AuthenticateRequest = (async (
     }
   }
 
-  let state: RequestState<TokenType> | UnauthenticatedState<null>;
   if (authenticateContext.tokenInHeader) {
     if (acceptsToken === 'any' || Array.isArray(acceptsToken)) {
-      state = await authenticateAnyRequestWithTokenInHeader();
-    } else if (acceptsToken === TokenType.SessionToken) {
-      state = await authenticateRequestWithTokenInHeader();
-    } else {
-      state = await authenticateMachineRequestWithTokenInHeader();
+      return authenticateAnyRequestWithTokenInHeader();
     }
-  } else if (
+    if (acceptsToken === TokenType.SessionToken) {
+      return authenticateRequestWithTokenInHeader();
+    }
+    return authenticateMachineRequestWithTokenInHeader();
+  }
+
+  if (
     acceptsToken === TokenType.OAuthToken ||
     acceptsToken === TokenType.ApiKey ||
     acceptsToken === TokenType.M2MToken
@@ -917,57 +916,9 @@ export const authenticateRequest: AuthenticateRequest = (async (
       authenticateContext,
       reason: 'No token in header',
     });
-  } else {
-    state = await authenticateRequestWithTokenInCookie();
   }
 
-  if (state.tokenType !== TokenType.SessionToken) {
-    return state;
-  }
-
-  const rejectPoppyAccount = () => {
-    const rejected = signedOut({
-      tokenType: TokenType.SessionToken,
-      authenticateContext,
-      reason: AuthErrorReason.PoppyAccountInvalid,
-      message: 'Poppy browser account authority is no longer valid.',
-    });
-    rejected.poppy = authenticateContext.poppySession;
-    return rejected;
-  };
-  const resolvePoppy = async (credential: PoppyCredential): Promise<PoppyBrowserSession | null> => {
-    if (!options.apiClient) {
-      throw new Error('A Clerk API client is required to verify Poppy account authority.');
-    }
-    try {
-      return await options.apiClient.__experimental_poppy.resolveSession(credential, authenticateContext.frontendApi);
-    } catch (error) {
-      if (isClerkAPIResponseError(error) && (error.status === 401 || error.status === 404)) {
-        return null;
-      }
-      throw error;
-    }
-  };
-
-  if (!state.isAuthenticated) {
-    return state;
-  }
-  const auth = state.toAuth();
-  if (auth.tokenType !== TokenType.SessionToken) {
-    return state;
-  }
-  const agent: unknown = auth.sessionClaims.agt;
-  const isPoppySession = typeof agent === 'object' && agent !== null && 'poppy' in agent;
-  if (!isPoppySession) {
-    return state;
-  }
-  const current = await resolvePoppy({ type: 'session', token: state.token });
-  if (!current?.account || current.account.session_id !== auth.sessionId || current.account.user_id !== auth.userId) {
-    return rejectPoppyAccount();
-  }
-  authenticateContext.poppySession = current;
-  state.poppy = current;
-  return state;
+  return authenticateRequestWithTokenInCookie();
 }) as AuthenticateRequest;
 
 export const debugRequestState = (params: RequestState) => {
