@@ -398,6 +398,7 @@ import {
   States as SwitchStates,
   WithField as SwitchWithField,
 } from '../stories/switch.stories';
+import { Combined as SwitcherCombined, meta as switcherMeta } from '../stories/switcher.stories';
 import { meta as tablePrimitiveMeta } from '../stories/table.primitive.stories';
 import {
   Default as TableDefault,
@@ -458,11 +459,7 @@ import {
   Shapes as UserAvatarShapes,
   Sizes as UserAvatarSizes,
 } from '../stories/user-avatar.stories';
-import {
-  Combined as UserButtonCombined,
-  meta as userButtonMeta,
-  User as UserButtonUser,
-} from '../stories/user-button.stories';
+import { Default as UserButtonDefault, meta as userButtonMeta } from '../stories/user-button.stories';
 import {
   Default as UserProfileDefault,
   meta as userProfileMeta,
@@ -811,10 +808,14 @@ const itemModule: StoryModule = {
   Group: ItemGroup,
 };
 
+const switcherModule: StoryModule = {
+  meta: switcherMeta,
+  Combined: SwitcherCombined,
+};
+
 const userButtonModule: StoryModule = {
   meta: userButtonMeta,
-  Combined: UserButtonCombined,
-  User: UserButtonUser,
+  Default: UserButtonDefault,
 };
 
 const taskSetupMfaModule: StoryModule = {
@@ -1277,8 +1278,8 @@ const organizationProfileMembersPanelModule: StoryModule = {
 };
 
 export const registry: StoryModule[] = [
-  // User Button
-  userButtonModule,
+  // Switcher
+  switcherModule,
   // User Profile
   userProfileModule,
   // User Profile · Panels
@@ -1312,6 +1313,7 @@ export const registry: StoryModule[] = [
   organizationProfileDangerSectionModule,
   // Misc
   { meta: mosaicProviderMeta },
+  userButtonModule,
   organizationSwitcherModule,
   createOrganizationModule,
   organizationListModule,
