@@ -1,0 +1,136 @@
+import type { PreferredSignInStrategy, SignInFactor, SignInStrategy, VerificationResource } from '../../types';
+
+/**
+ * Picks the first factor a sign-in starts on, following the algorithm at
+ * https://www.notion.so/clerkdev/Implement-sign-in-alt-methods-e6e60ffb644645b3a0553b50556468ce
+ *
+ * @internal
+ */
+export function determineStartingSignInFactor(
+  firstFactors: SignInFactor[] | null,
+  identifier: string | null,
+  preferredSignInStrategy: PreferredSignInStrategy,
+  webAuthnSupported: boolean,
+): SignInFactor | null | undefined {
+  if (!firstFactors || firstFactors.length === 0) {
+    return null;
+  }
+
+  return preferredSignInStrategy === 'password'
+    ? determineStrategyWhenPasswordIsPreferred(firstFactors, identifier, webAuthnSupported)
+    : determineStrategyWhenOTPIsPreferred(firstFactors, identifier, webAuthnSupported);
+}
+
+/**
+ * Tells whether the pending first factor verification holds a code for `factor`.
+ * FAPI does not say which email or phone a code went to, so `preparedFactorKey`,
+ * the key of the factor last prepared in this mount or `null` if none, tells
+ * factors with the same strategy apart.
+ *
+ * @internal
+ */
+export function isFirstFactorCodeSent(
+  verification: Pick<VerificationResource, 'status' | 'strategy'>,
+  factor: SignInFactor,
+  preparedFactorKey: string | null,
+): boolean {
+  return (
+    verification.status === 'unverified' &&
+    verification.strategy === factor.strategy &&
+    (preparedFactorKey === null || preparedFactorKey === getSignInFactorKey(factor))
+  );
+}
+
+/**
+ * Builds the key that identifies a factor across prepare calls, from its strategy,
+ * email address or phone number id, and channel.
+ *
+ * @internal
+ */
+export function getSignInFactorKey(factor: SignInFactor): string {
+  let key: string = factor.strategy;
+  if ('emailAddressId' in factor) {
+    key += `_${factor.emailAddressId}`;
+  }
+  if ('phoneNumberId' in factor) {
+    key += `_${factor.phoneNumberId}`;
+  }
+  if ('channel' in factor && factor.channel) {
+    key += `_${factor.channel}`;
+  }
+  return key;
+}
+
+function determineStrategyWhenPasswordIsPreferred(
+  factors: SignInFactor[],
+  identifier: string | null,
+  webAuthnSupported: boolean,
+): SignInFactor | null {
+  const passkeyFactor = findPasskeyStrategy(factors, webAuthnSupported);
+  if (passkeyFactor) {
+    return passkeyFactor;
+  }
+  const sorted = [...factors].sort(passwordPrefFactorComparator);
+  const selected = sorted[0];
+  if (selected.strategy === 'password') {
+    return selected;
+  }
+  return sorted.find(factorForIdentifier(identifier)) || selected || null;
+}
+
+function determineStrategyWhenOTPIsPreferred(
+  factors: SignInFactor[],
+  identifier: string | null,
+  webAuthnSupported: boolean,
+): SignInFactor | null {
+  const passkeyFactor = findPasskeyStrategy(factors, webAuthnSupported);
+  if (passkeyFactor) {
+    return passkeyFactor;
+  }
+  const sortedBasedOnPrefFactor = [...factors].sort(otpPrefFactorComparator);
+  const forIdentifier = sortedBasedOnPrefFactor.find(factorForIdentifier(identifier));
+  if (forIdentifier) {
+    return forIdentifier;
+  }
+  const firstBasedOnPref = sortedBasedOnPrefFactor[0];
+  if (firstBasedOnPref.strategy === 'email_link') {
+    return firstBasedOnPref;
+  }
+  return sortedBasedOnPrefFactor.find(factorForIdentifier(identifier)) || firstBasedOnPref || null;
+}
+
+function findPasskeyStrategy(factors: SignInFactor[], webAuthnSupported: boolean): SignInFactor | null {
+  if (webAuthnSupported) {
+    const passkeyFactor = factors.find(({ strategy }) => strategy === 'passkey');
+
+    if (passkeyFactor) {
+      return passkeyFactor;
+    }
+  }
+  return null;
+}
+
+const factorForIdentifier = (i: string | null) => (f: SignInFactor) => {
+  return 'safeIdentifier' in f && f.safeIdentifier === i;
+};
+
+const passwordPrefFactorComparator = makeSortingFunction([
+  'passkey',
+  'password',
+  'email_link',
+  'email_code',
+  'phone_code',
+]);
+
+const otpPrefFactorComparator = makeSortingFunction(['email_link', 'email_code', 'phone_code', 'passkey', 'password']);
+
+function makeSortingFunction(order: SignInStrategy[]) {
+  return (a: SignInFactor, b: SignInFactor): number => {
+    const orderA = order.indexOf(a.strategy);
+    const orderB = order.indexOf(b.strategy);
+    if (orderA === -1 || orderB === -1) {
+      return 0;
+    }
+    return orderA - orderB;
+  };
+}
