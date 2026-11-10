@@ -91,7 +91,7 @@ clerk-js sends `__clerk_api_version` on every request (`clerk-js/src/core/fapiCl
 
 ### Bridge
 
-`getSignInNextStep` and `getSignUpNextStep` (`shared/src/internal/clerk-js/getNextStep.ts`) compute the step from today's fields. Mosaic uses them from day one, so it works against any FAPI. Once FAPI sends `next_step`, they will return it, and once the minimum supported API version has it, the computing half is deleted.
+`getSignInNextStep` and `getSignUpNextStep` (`shared/src/internal/clerk-js/nextStep.ts`) compute the step from today's fields. Mosaic uses them from day one, so it works against any FAPI. Once FAPI sends `next_step`, they will return it, and once the minimum supported API version has it, the computing half is deleted.
 
 Against the same fixtures, `getSignUpNextStep` differs from `ui`'s routers (`shared/src/internal/clerk-js/navigateToNextStepSignUp.ts`, `completeSignUpFlow.ts`) in four cases:
 
@@ -110,7 +110,7 @@ What the bridge can't compute, so FAPI must send:
 
 | Phase | Change                                                           | Behaviour change                  |
 | ----- | ---------------------------------------------------------------- | --------------------------------- |
-| 1     | `getNextStep` bridge in `shared`, used by Mosaic                 | None for existing surfaces        |
+| 1     | Next-step bridge in `shared`, used by Mosaic                     | None for existing surfaces        |
 | 2     | FAPI sends `next_step`, `clerk-js` exposes `nextStep` (additive) | None until a client reads it      |
 | 3     | FAPI transfers on `intent: 'sign_in_or_up'`                      | Only for clients that pass it     |
 | 4     | `ui`, iOS and Android read `nextStep` and delete their routers   | Sign-up order becomes FAPI's (D2) |
