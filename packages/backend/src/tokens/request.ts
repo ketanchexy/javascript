@@ -940,7 +940,7 @@ export const authenticateRequest: AuthenticateRequest = (async (
       throw new Error('A Clerk API client is required to verify Poppy account authority.');
     }
     try {
-      return await options.apiClient.__experimental_poppy.resolveSession(credential);
+      return await options.apiClient.__experimental_poppy.resolveSession(credential, authenticateContext.frontendApi);
     } catch (error) {
       if (isClerkAPIResponseError(error) && (error.status === 401 || error.status === 404)) {
         return null;

@@ -1,4 +1,3 @@
-import { buildPublishableKey } from '@clerk/shared/keys';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -7,7 +6,6 @@ import { createBackendApiClient } from '../factory';
 
 describe('PoppyAPI', () => {
   const frontendApi = 'https://clerk.company.example';
-  const publishableKey = buildPublishableKey('clerk.company.example');
   const identity = { session_id: 'protocol-session', client_id: 'https://agent.example', user_id: 'pseudonym' };
 
   it('gets discovery from the authenticated Backend API artifact without changing the document', async () => {
@@ -26,7 +24,6 @@ describe('PoppyAPI', () => {
     );
     const { __experimental_poppy: poppy } = createBackendApiClient({
       apiUrl: 'https://api.clerk.test',
-      publishableKey,
       secretKey: 'sk_live_example',
     });
     await expect(poppy.getMetadata()).resolves.toEqual(metadata);
@@ -47,7 +44,6 @@ describe('PoppyAPI', () => {
     );
     const { __experimental_poppy: poppy } = createBackendApiClient({
       apiUrl: 'https://api.clerk.test',
-      publishableKey,
       secretKey: 'sk_live_example',
     });
     await expect(poppy.getMetadata()).rejects.toMatchObject({ status });
@@ -63,13 +59,8 @@ describe('PoppyAPI', () => {
           return HttpResponse.json(identity);
         }),
       );
-      const { __experimental_poppy: poppy } = createBackendApiClient({ publishableKey });
-      await expect(poppy.resolveSession(credential)).resolves.toEqual(identity);
+      const { __experimental_poppy: poppy } = createBackendApiClient({});
+      await expect(poppy.resolveSession(credential, frontendApi)).resolves.toEqual(identity);
     },
   );
-
-  it('requires a publishable key', async () => {
-    const { __experimental_poppy: poppy } = createBackendApiClient({ secretKey: 'sk_live_example' });
-    await expect(poppy.resolveSession({ type: 'session', token: 'jwt' })).rejects.toThrow('publishable key');
-  });
 });

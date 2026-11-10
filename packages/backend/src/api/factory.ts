@@ -1,5 +1,3 @@
-import { parsePublishableKey } from '@clerk/shared/keys';
-
 import {
   AccountlessApplicationAPI,
   ActorTokenAPI,
@@ -43,17 +41,12 @@ import { buildRequest } from './request';
 
 export type CreateBackendApiOptions = Parameters<typeof buildRequest>[0] & {
   jwtKey?: string;
-  publishableKey?: string;
 };
 
 export type ApiClient = ReturnType<typeof createBackendApiClient>;
 
 export function createBackendApiClient(options: CreateBackendApiOptions) {
   const request = buildRequest(options);
-  const frontendApi = parsePublishableKey(options.publishableKey)?.frontendApi;
-  const poppyBrowserRequest = frontendApi
-    ? buildRequest({ apiUrl: `https://${frontendApi}`, requireSecretKey: false, userAgent: options.userAgent })
-    : () => Promise.reject(new Error('A valid Clerk publishable key is required for Poppy browser sessions.'));
 
   return {
     __experimental_accountlessApplications: new AccountlessApplicationAPI(
@@ -115,7 +108,7 @@ export function createBackendApiClient(options: CreateBackendApiOptions) {
     organizations: new OrganizationAPI(request),
     organizationPermissions: new OrganizationPermissionAPI(request),
     organizationRoles: new OrganizationRoleAPI(request),
-    __experimental_poppy: new PoppyAPI(poppyBrowserRequest, request),
+    __experimental_poppy: new PoppyAPI(request, options.userAgent),
     phoneNumbers: new PhoneNumberAPI(request),
     proxyChecks: new ProxyCheckAPI(request),
     redirectUrls: new RedirectUrlAPI(request),

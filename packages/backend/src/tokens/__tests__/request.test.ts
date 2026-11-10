@@ -532,7 +532,7 @@ describe('tokens.authenticateRequest(options)', () => {
       );
       const state = await authenticateRequest(
         mockRequestWithHeaderAuth({ authorization: `Bearer ${jwt}` }),
-        mockOptions({ apiClient: createBackendApiClient({ publishableKey: PK_TEST }) }),
+        mockOptions({ apiClient: createBackendApiClient({}) }),
       );
       expect(state.isAuthenticated).toBe(active);
       const auth = state.toAuth();
@@ -567,7 +567,7 @@ describe('tokens.authenticateRequest(options)', () => {
       await expect(
         authenticateRequest(
           mockRequestWithHeaderAuth({ authorization: `Bearer ${jwt}` }),
-          mockOptions({ apiClient: createBackendApiClient({ publishableKey: PK_TEST }) }),
+          mockOptions({ apiClient: createBackendApiClient({}) }),
         ),
       ).rejects.toMatchObject({ status: 503 });
     });
@@ -576,7 +576,7 @@ describe('tokens.authenticateRequest(options)', () => {
       server.use(http.get('https://api.clerk.test/v1/jwks', () => HttpResponse.json(mockJwks)));
       const state = await authenticateRequest(
         mockRequestWithHeaderAuth({ cookie: '__Host-poppy_session=untrusted' }),
-        mockOptions({ apiClient: createBackendApiClient({ publishableKey: PK_TEST }), __experimental_poppy: true }),
+        mockOptions({ apiClient: createBackendApiClient({}), __experimental_poppy: true }),
       );
       expect(state.isAuthenticated).toBe(true);
       expect(state.poppy).toBeFalsy();
