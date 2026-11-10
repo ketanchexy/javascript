@@ -1,5 +1,18 @@
 # Change Log
 
+## 3.28.0
+
+### Minor Changes
+
+- JWTs without a `cat` header are no longer accepted as session tokens: `authenticateRequest()` returns signed out (`token-type-mismatch`) and `verifyToken()` returns `token-invalid`. This includes OIDC `id_token`s issued by Clerk. Tests that sign their own session tokens must add `cat: 'cl_B7d4PD111AAA'` to the header. ([#10257](https://github.com/clerk/javascript/pull/10257)) by [@dominic-clerk](https://github.com/dominic-clerk)
+
+- Add `startingAfter` to `users.getUserList()` so applications can page through user lists with a cursor. ([#10200](https://github.com/clerk/javascript/pull/10200)) by [@SarahSoutoul](https://github.com/SarahSoutoul)
+
+### Patch Changes
+
+- Updated dependencies [[`85afdd1`](https://github.com/clerk/javascript/commit/85afdd1ae903adbf04ec9529de4496423f77343d)]:
+  - @clerk/shared@4.44.2
+
 ## 3.27.0
 
 ### Minor Changes

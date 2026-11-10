@@ -1,5 +1,16 @@
 # @clerk/nuxt
 
+## 3.1.23
+
+### Patch Changes
+
+- Fix the `[NUXT_B7002] Some vite.optimizeDeps.include entries could not be resolved: @clerk/vue` warning on dev server start with package managers that do not hoist transitive dependencies, such as pnpm and Bun. In these setups on Nuxt versions before 4.6, Vite now pre-bundles `@clerk/vue` instead of serving its modules unbundled in development. ([#10699](https://github.com/clerk/javascript/pull/10699)) by [@wobsoriano](https://github.com/wobsoriano)
+
+- Updated dependencies [[`b9d10ba`](https://github.com/clerk/javascript/commit/b9d10ba5d3a177d63abc47544f8fdfa27a995761), [`85afdd1`](https://github.com/clerk/javascript/commit/85afdd1ae903adbf04ec9529de4496423f77343d), [`d71a6a1`](https://github.com/clerk/javascript/commit/d71a6a166313d01b48b525294d39eb685aa63934)]:
+  - @clerk/backend@3.28.0
+  - @clerk/shared@4.44.2
+  - @clerk/vue@2.5.20
+
 ## 3.1.22
 
 ### Patch Changes
